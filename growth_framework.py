@@ -124,7 +124,7 @@ if st.button("Build"):
         seniority_level = entry["seniority_level"]
         for attribute in entry["attributes"]:
             competencies = [
-                f"{i}. {c}"
+                f"{i+1}. {c}"
                 for i, c
                 in enumerate(attribute["attribute_competencies"])
             ]
