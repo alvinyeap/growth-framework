@@ -12,9 +12,11 @@ if 'num_levels' not in st.session_state:
 if 'num_attrs' not in st.session_state:
     st.session_state["num_attrs"] = "3"
 if 'levels' not in st.session_state:
-    st.session_state["levels"] = []
+    st.session_state["levels"] = [f"L{l+1}" for l in range(6)]
 if 'attributes' not in st.session_state:
-    st.session_state["attributes"] = []
+    st.session_state["attributes"] = [
+        {"name": "", "description": ""} for _ in range(3)
+    ]
 
 c1, c2, c3 = st.columns(3)
 with c1:
@@ -23,7 +25,8 @@ with c1:
 with c2:
     if num_levels := st.text_input("Number of seniority levels", placeholder="6"):
         st.session_state['num_levels'] = num_levels
-        st.session_state["levels"] = ["" for _ in range(int(num_levels))]
+        st.session_state["levels"] = [
+            f"L{l+1}" for l in range(int(num_levels))]
 with c3:
     if num_attrs := st.text_input("Number of attributes", placeholder="3"):
         st.session_state['num_attrs'] = num_attrs
@@ -34,11 +37,12 @@ with c3:
 
 with st.expander("Seniority Levels"):
     num_levels = int(st.session_state['num_levels'])
-    levels = ["" for _ in range(num_levels)]
+    levels = [f"L{l+1}" for l in range(num_levels)]
     for l in range(num_levels):
         levels[l] = st.text_input(f"Level {l+1}", placeholder=f"L{l+1}")
         if levels[l]:
             st.session_state['levels'][l] = levels[l]
+    # st.markdown(st.session_state["levels"])
 
 
 with st.expander("Attributes"):
@@ -56,6 +60,8 @@ with st.expander("Attributes"):
             )
             if attributes[a]["description"] != "":
                 st.session_state["attributes"][a]["description"] = attributes[a]["description"]
+    # st.markdown(st.session_state["attributes"])
+
 
 # attributes = {
 #     "Communication": "The ability to effectively communicate, both in writing and verbally, is crucial. This includes being able to explain ideas clearly, listen to others, and engage in constructive discussions.",
@@ -64,6 +70,7 @@ with st.expander("Attributes"):
 #     "Adaptability": "The business world is constantly changing, so being able to adapt to new situations and be flexible in the face of change is important. This includes being open to new ideas, willing to learn, and capable of adjusting to shifting priorities or tasks.",
 #     "Professionalism": "Displaying a strong sense of professionalism and a solid work ethic is crucial. This encompasses being reliable, punctual, responsible, and showing dedication to one’s job and the company’s values and goals."
 # }
+
 attributes_str = "\n".join(
     [
         f"{d['name']}: {d['description']}"
@@ -74,8 +81,9 @@ attributes_str = "\n".join(
 PROMPT = (
     f"""
     Write a growth framework for a fictional company.
-    The collective noun for employees at this company is {st.session_state['employee_name']}.
-    The company has {st.session_state['num_levels']} seniority levels: {st.session_state['levels']} .
+    The collective noun for employees at this company is {employee_name}.
+    The company has {num_levels} seniority levels: {levels}.
+    In our company we have professional functions: HR, Finance, Legal, Sales, Marketing, Engineering, Design, Product, Operations, Customer Support, Customer Onboarding, Customer Retention, IT and Analytics
     The company has the following values or key attributes:
     {attributes_str}\n
     """
@@ -85,7 +93,12 @@ PROMPT = (
         "growth_framework": [
             {{
                 seniority_level: one of {st.session_state['levels']}.
-                attributes: a JSON object with attribute_name as keys and description as values
+                attributes: [
+                    {{
+                        attribute_name: the name of the attribute,
+                        attribute_competencies: a list of 3-5 competencies that should be demonstrated at this seniority level. These should be generalized across all the mentioned professional functions.
+                    }}
+                ]
             }},
             ...
         ]
@@ -95,8 +108,6 @@ PROMPT = (
 
 
 if st.button("Build"):
-    # st.markdown(PROMPT)
-
     messages = [{'role': 'user', 'content': PROMPT}]
     response = openai.chat.completions.create(
         model='gpt-4-1106-preview',
@@ -109,13 +120,23 @@ if st.button("Build"):
     growth_framework = json.loads(message)['growth_framework']
 
     records = []
-    for item in growth_framework:
-        new_item = item.copy()
-        new_item.update(item["attributes"])
-        del new_item["attributes"]
-        records.append(new_item)
+    for entry in growth_framework:
+        seniority_level = entry["seniority_level"]
+        for attribute in entry["attributes"]:
+            competencies = [
+                f"{i}. {c}"
+                for i, c
+                in enumerate(attribute["attribute_competencies"])
+            ]
+            records.append({
+                "seniority_level": seniority_level,
+                "attribute_name": attribute["attribute_name"],
+                "attribute_competencies": '\n'.join(competencies)
+            })
 
     df = pd.DataFrame.from_records(records)
-    df = df.rename(columns={"seniority_level": "Seniority Level"})
-    df = df.set_index("Seniority Level")
+    df = df.pivot(index='attribute_name', columns='seniority_level',
+                  values='attribute_competencies')
+
     st.table(df)
+    # st.dataframe(df)
